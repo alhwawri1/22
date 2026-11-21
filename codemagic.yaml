@@ -1,0 +1,65 @@
+workflows:
+  masareef-ios-ipa:
+    name: Masareef Unsigned iOS IPA
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      node: 20
+      xcode: latest
+    scripts:
+      - name: Install Capacitor dependencies
+        script: npm install
+      - name: Generate and sync iOS project
+        script: |
+          if [ ! -d "ios" ]; then
+            npx cap add ios
+          fi
+          npx cap sync ios
+          if [ -f "ios/App/Podfile" ]; then
+            cd ios/App && pod install --repo-update && cd ../..
+          fi
+      - name: Configure Info.plist
+        script: |
+          PLIST="ios/App/App/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Masareef" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" "$PLIST" || true
+      - name: Build unsigned iOS archive
+        script: |
+          cd ios/App
+          if [ -f "App.xcworkspace/contents.xcworkspacedata" ]; then
+            xcodebuild \
+              -workspace App.xcworkspace \
+              -scheme App \
+              -configuration Release \
+              -sdk iphoneos \
+              -derivedDataPath ../../build/DerivedData \
+              -archivePath ../../build/Masareef.xcarchive \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              DEVELOPMENT_TEAM="" \
+              PROVISIONING_PROFILE="" \
+              archive
+          else
+            xcodebuild \
+              -project App.xcodeproj \
+              -scheme App \
+              -configuration Release \
+              -sdk iphoneos \
+              -derivedDataPath ../../build/DerivedData \
+              -archivePath ../../build/Masareef.xcarchive \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              DEVELOPMENT_TEAM="" \
+              PROVISIONING_PROFILE="" \
+              archive
+          fi
+      - name: Package unsigned IPA
+        script: |
+          mkdir -p build/Payload
+          cp -r build/Masareef.xcarchive/Products/Applications/App.app build/Payload/
+          cd build
+          zip -r -y Masareef-unsigned.ipa Payload
+    artifacts:
+      - build/Masareef-unsigned.ipa
